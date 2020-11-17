@@ -1,8 +1,8 @@
 ## PSYM3
 A rewrite in C of my first program
 ###### what?
-It's a utility that fetches all the files with specified extensions from the directories, groups files with the same creation time together, shuffles those group and writes it to a file, which it can later read and extract each group by copying the files in their corresponding folders.
+This unit goes through the specified folders, records every occurance of every file with a given set of extensions, groups them in chuncks by creation time, shuffles them and saves to a file. Then that file can be traversed to extract those chunks and copy every file from each chunk in a destination folder.
 ### Usage
-I hope `psym --help` will make sense
+I hope `psym --help` will make sense :)
 ### Building
-It uses Windows API, you get the idea :)
+Targets Windows specifically, so Win API is required. msvc and mingw-w64 work just fine

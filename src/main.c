@@ -400,9 +400,16 @@ int rst(const wchar_t *input)
     return 0;
 }
 
-int wmain(int argc, wchar_t **argv)
+int main(int argc, char **argv)
 {
-    if (argc == 2 && !wcscmp(argv[1], L"--help"))
+    srand(time(NULL));
+    wchar_t **wargv_mem = CommandLineToArgvW(GetCommandLineW(), &argc);
+    wchar_t **wargv = wargv_mem;
+
+    int ret = -1;
+    opt_ctx* ctx = NULL;
+
+    if (argc == 2 && !wcscmp(wargv[1], L"--help"))
     {
         wprintf(
             L"usage: psym {gen <dirs...> | ext <num> | rst} [options...] <file>\n" \
@@ -436,37 +443,37 @@ int wmain(int argc, wchar_t **argv)
             L"-u:\thighest possible\n" \
             L"-o:\tcurrent directory\n"
             , DEF_UNIT_SIZE);
-        return 0;
+        ret = 0;
+        goto ret_point;
     }
 
     if (argc < 3)
-        return log_err_and_return(L"not enough arguments\n");
-
-    const wchar_t *file = argv[argc - 1];
-
-    if (!wcscmp(argv[1], L"rst"))
     {
-        if (argc != 3)
-            return log_err_and_return(L"too many arguments\n");
-        return rst(file);
+        ret = log_err_and_return(L"not enough arguments\n");
+        goto ret_point;
     }
 
-    argc -= 3;
-    int ret = -1;
-    opt_ctx *ctx = NULL;
-    if (!wcscmp(argv[1], L"gen"))
+    const wchar_t *file = wargv[argc - 1];
+    if (!wcscmp(wargv[1], L"rst"))
     {
-        argv += 2;
+        ret = argc == 3 ? 
+            rst(file) :
+            log_err_and_return(L"too many arguments\n");
+    }
+    else if (!wcscmp(wargv[1], L"gen"))
+    {
+        argc -= 3;
+        wargv += 2;
         uint8_t dir_count = 0, ext_count = sizeof(_DEF_EXTENSIONS) / sizeof(wchar_t *);
         uint8_t unit_size = DEF_UNIT_SIZE;
         time_t l_bound = 0, u_bound = LLONG_MAX;
-        const wchar_t **dirs = argv, **exts = _DEF_EXTENSIONS;
+        const wchar_t **dirs = wargv, **exts = _DEF_EXTENSIONS;
 
-        while (argv[dir_count][0] != '-' && dir_count < argc)
+        while (wargv[dir_count][0] != '-' && dir_count < argc)
             ++dir_count;
 
         int opt_counts[4] = { OPT_ARGS_NON_ZERO, 1, 1, 1 };
-        ctx = parse_options(argc - dir_count, argv + dir_count, L"eslu", opt_counts, 4);
+        ctx = parse_options(argc - dir_count, wargv + dir_count, L"eslu", opt_counts, 4);
         if (ctx)
         {
             opt_node* opt = find_opt(ctx, L'e');
@@ -508,21 +515,21 @@ int wmain(int argc, wchar_t **argv)
         }
 
         ret = gen(dirs, dir_count, exts, ext_count, file, unit_size, l_bound, u_bound);
-        goto ret_point;
     }
-    else if (!wcscmp(argv[1], L"ext"))
+    else if (!wcscmp(wargv[1], L"ext"))
     {
-        argv += 2;
+        argc -= 3;
+        wargv += 2;
         int unit_count = -1;
         char keep_pos = 0;
         wchar_t *output = NULL;
 
-        unit_count = wcstol(argv[0], NULL, 10);
+        unit_count = wcstol(wargv[0], NULL, 10);
         if (unit_count == INT_MAX || unit_count <= 0)
             return log_err_and_return(L"invalid/out of range value: unit count\n");
 
         int opt_counts[2] = { 1, OPT_FLAG };
-        ctx = parse_options(argc - 1, argv + 1, L"ok", opt_counts, 2);
+        ctx = parse_options(argc - 1, wargv + 1, L"ok", opt_counts, 2);
         if (ctx)
         {
             opt_node *opt = find_opt(ctx, L'o');
@@ -534,15 +541,12 @@ int wmain(int argc, wchar_t **argv)
         }
 
         ret = extract(file, output, unit_count, keep_pos);
-        goto ret_point;
     }
     else
-    {
-        wprintf(L"invalid usage, type --help to learn more\n");
-        return -1;
-    }
+        ret = log_err_and_return(L"invalid usage, type --help to learn more\n");
 
 ret_point:
+    LocalFree(wargv_mem);
     if (ctx)
         delete_opt_ctx(ctx);
     return ret;
