@@ -23,7 +23,7 @@ opt_node *find_opt(opt_ctx *ctx, wchar_t opt)
     return NULL;
 }
 
-opt_ctx *parse_options(int argc, wchar_t **argv, const wchar_t *flags, int *flag_arg_count, int arg_count)
+opt_ctx *parse_options(int argc, wchar_t **argv, const wchar_t *opts, int *opt_arg_count, int arg_count)
 {
     if (!argc)
         return NULL;
@@ -33,7 +33,7 @@ opt_ctx *parse_options(int argc, wchar_t **argv, const wchar_t *flags, int *flag
     ctx->count = arg_count;
     for (int i = 0; i < arg_count; ++i)
     {
-        ctx->nodes[i].opt = flags[i];
+        ctx->nodes[i].opt = opts[i];
         ctx->nodes[i].count = 0;
     }
 
@@ -58,14 +58,14 @@ opt_ctx *parse_options(int argc, wchar_t **argv, const wchar_t *flags, int *flag
             goto err_ret;
         }
 
-        if (flag_arg_count[node - ctx->nodes] == OPT_FLAG)
+        if (opt_arg_count[node - ctx->nodes] == OPT_FLAG)
         {
             node->count = 1;
             wchar_t *str_it = argv[0] + 2;
             while (*str_it != L'\0')
             {
                 node = find_opt(ctx, *(str_it++));
-                if (!node || flag_arg_count[node - ctx->nodes] != OPT_FLAG)
+                if (!node || opt_arg_count[node - ctx->nodes] != OPT_FLAG)
                 {
                     fwprintf(stderr, L"unrecognized option -%c\n", argv[0][1]);
                     goto err_ret;
@@ -79,6 +79,7 @@ opt_ctx *parse_options(int argc, wchar_t **argv, const wchar_t *flags, int *flag
 
                 node->count = 1;
             }
+            ++argv;
         }
         else
         {
@@ -87,13 +88,12 @@ opt_ctx *parse_options(int argc, wchar_t **argv, const wchar_t *flags, int *flag
                 const int len = wcslen(argv[0] + 2);
                 memmove(argv[0], argv[0] + 2, sizeof(wchar_t) * (len + 1));
                 node->count = 1;
-                node->args = argv;
-                ++argv;
+                node->args = argv++;
             }
             else
             {
                 const int ind = node - ctx->nodes;
-                while (++argv != argv_end && argv[0][0] != L'-' &&  node->count < flag_arg_count[ind])
+                while (++argv != argv_end && argv[0][0] != L'-' &&  node->count < opt_arg_count[ind])
                     ++node->count;
                 if (!node->count)
                 {

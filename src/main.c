@@ -233,7 +233,7 @@ static int gen(const wchar_t **dirs, uint8_t dir_count, const wchar_t** exts, ui
     return ret;
 }
 
-static int extract(const wchar_t *input, const wchar_t *output, int count)
+static int extract(const wchar_t *input, const wchar_t *output, int count, char keep_pos)
 {
     typedef struct
     {
@@ -248,7 +248,7 @@ static int extract(const wchar_t *input, const wchar_t *output, int count)
         uint8_t count;
     } psym_cmp_unit;
 
-    FILE *file = _wfopen(input, L"rb+");
+    FILE *file = _wfopen(input, keep_pos ? L"rb" : L"rb+");
     if (!file)
         return log_err_and_return(L"could not open file %s\n", input);
 
@@ -257,7 +257,10 @@ static int extract(const wchar_t *input, const wchar_t *output, int count)
 
     fread(id_buf, sizeof(char), 5, file);
     if (strcmp(id_buf, "PSYM3"))
+    {
+        fclose(file);
         return log_err_and_return(L"could not identify input file %s\n", input);
+    }
     // unit size
     fread(&unit_size, sizeof unit_size, 1, file);
 
@@ -301,9 +304,12 @@ static int extract(const wchar_t *input, const wchar_t *output, int count)
     }
 
     // update pos
-    file_iter = ftell(file);
-    fseek(file, file_iter_pos, 0);
-    fwrite(&file_iter, sizeof file_iter, 1, file);
+    if (!keep_pos)
+    {
+        file_iter = ftell(file);
+        fseek(file, file_iter_pos, 0);
+        fwrite(&file_iter, sizeof file_iter, 1, file);
+    }
     fclose(file);
 
     wchar_t dir_path[MAX_PATH], dir_path_unit[MAX_PATH], dst_path[MAX_PATH], src_path[MAX_PATH];
@@ -361,22 +367,63 @@ static int extract(const wchar_t *input, const wchar_t *output, int count)
     return ret;
 }
 
+int rst(const wchar_t *input)
+{
+    FILE* file = _wfopen(input, L"rb+");
+    if (!file)
+        return log_err_and_return(L"could not open file %s\n", input);
+
+    uint16_t int_buf;
+    char id_buf[6] = { '\0' };
+
+    fread(id_buf, sizeof(char), 5, file);
+    if (strcmp(id_buf, "PSYM3"))
+    {
+        fclose(file);
+        return log_err_and_return(L"could not identify input file %s\n", input);
+    }
+
+    fseek(file, 1, SEEK_CUR);
+    // both exts and dirs
+    for (int i = 0; i < 2; ++i)
+    {
+        fread((uint8_t *)&int_buf, sizeof(uint8_t), 1, file);
+        for (uint8_t i = *(uint8_t *)&int_buf; i; --i)
+        {
+            fread(&int_buf, sizeof int_buf, 1, file);
+            fseek(file, int_buf * sizeof(wchar_t), SEEK_CUR);
+        }
+    }
+    uint32_t pos_buf = ftell(file) + sizeof pos_buf;
+    fwrite(&pos_buf, sizeof pos_buf, 1, file);
+    fclose(file);
+    return 0;
+}
+
 int wmain(int argc, wchar_t **argv)
 {
     if (argc == 2 && !wcscmp(argv[1], L"--help"))
     {
         wprintf(
-            L"usage: psym {gen <dirs...> | ext <num>} [options...] <file>\n" \
+            L"usage: psym {gen <dirs...> | ext <num> | rst} [options...] <file>\n" \
             L"<dirs..>              \tdirectories to cycle through\n" \
             L"<num>                 \tnumber of entries to extract\n" \
             L"<file>                \tfile to operate on/save to\n" \
+            L"mode description:\n" \
+            L"gen                   \tgenerate reference file\n" \
+            L"ext                   \textract entries\n" \
+            L"rst                   \treset position in reference file\n" \
             L"gen options:\n" \
             L"-e <ext...> , -e<ext> \tspecify accepted file extensions(without leading .)\n" \
             L"-s <size> , -s<size>  \tspecify generated entry size\n" \
             L"-l <date> , -l<date>  \tspecify the lower file date bound in dd.mm.yy format\n" \
             L"-u <date> , -u<date>  \tspecify the upper file date bound in dd.mm.yy format\n" \
             L"ext options:\n" \
-            L"-o <out> -o<out>      \tspecify output directory\n\n" \
+            L"-o <out> -o<out>      \tspecify output directory\n" \
+            L"-k                    \tdon't update the reading position\n" \
+            L"rst options:\n" \
+            L"no options\n\n" \
+
             L"defaults:\n" \
             L"-e:\t");
         const int def_ext_count = sizeof(_DEF_EXTENSIONS) / sizeof(wchar_t *) - 1;
@@ -389,14 +436,22 @@ int wmain(int argc, wchar_t **argv)
             L"-u:\thighest possible\n" \
             L"-o:\tcurrent directory\n"
             , DEF_UNIT_SIZE);
+        return 0;
     }
 
     if (argc < 3)
         return log_err_and_return(L"not enough arguments\n");
 
     const wchar_t *file = argv[argc - 1];
-    argc -= 3;
 
+    if (!wcscmp(argv[1], L"rst"))
+    {
+        if (argc != 3)
+            return log_err_and_return(L"too many arguments\n");
+        return rst(file);
+    }
+
+    argc -= 3;
     int ret = -1;
     opt_ctx *ctx = NULL;
     if (!wcscmp(argv[1], L"gen"))
@@ -405,7 +460,7 @@ int wmain(int argc, wchar_t **argv)
         uint8_t dir_count = 0, ext_count = sizeof(_DEF_EXTENSIONS) / sizeof(wchar_t *);
         uint8_t unit_size = DEF_UNIT_SIZE;
         time_t l_bound = 0, u_bound = LLONG_MAX;
-        wchar_t **dirs = argv, **exts = _DEF_EXTENSIONS;
+        const wchar_t **dirs = argv, **exts = _DEF_EXTENSIONS;
 
         while (argv[dir_count][0] != '-' && dir_count < argc)
             ++dir_count;
@@ -459,22 +514,26 @@ int wmain(int argc, wchar_t **argv)
     {
         argv += 2;
         int unit_count = -1;
+        char keep_pos = 0;
         wchar_t *output = NULL;
 
         unit_count = wcstol(argv[0], NULL, 10);
         if (unit_count == INT_MAX || unit_count <= 0)
             return log_err_and_return(L"invalid/out of range value: unit count\n");
 
-        int opt_counts[1] = { 1 };
-        ctx = parse_options(argc - 1, argv + 1, L"o", opt_counts, 1);
+        int opt_counts[2] = { 1, OPT_FLAG };
+        ctx = parse_options(argc - 1, argv + 1, L"ok", opt_counts, 2);
         if (ctx)
         {
-            opt_node* opt = find_opt(ctx, L'e');
+            opt_node *opt = find_opt(ctx, L'o');
             if (OPT_ARGS_EXISTS(*opt))
                 output = opt->args[0];
+            opt = find_opt(ctx, L'k');
+            if (OPT_FLAG_EXISTS(*opt))
+                keep_pos = 1;
         }
 
-        ret = extract(file, output, unit_count);
+        ret = extract(file, output, unit_count, keep_pos);
         goto ret_point;
     }
     else

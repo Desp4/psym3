@@ -5,7 +5,7 @@ int rand_range(int min, int max)
     return rand() * (1.0 / RAND_MAX) * (max - min + 1) + min;
 }
 
-time_t file_modify_time(const FILETIME* filetime)
+time_t file_modify_time(const FILETIME *filetime)
 {
     SYSTEMTIME stime;
 
@@ -24,7 +24,7 @@ time_t file_modify_time(const FILETIME* filetime)
     return mktime(&time);
 }
 
-time_t wcstot_t(const wchar_t* str)
+time_t wcstot_t(const wchar_t *str)
 {
     int y, m, d;
     if (swscanf(str, L"%d.%d.%d", &d, &m, &y) == 3)
@@ -41,7 +41,7 @@ time_t wcstot_t(const wchar_t* str)
     return -1;
 }
 
-int create_dir_dupsafe(wchar_t* out_dir, const wchar_t* dir)
+int create_dir_dupsafe(wchar_t *out_dir, const wchar_t *dir)
 {
     wcscpy(out_dir, dir);
     int dir_attempt = 1;

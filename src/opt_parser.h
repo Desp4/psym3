@@ -20,6 +20,6 @@ typedef struct opt_ctx opt_ctx;
 
 void delete_opt_ctx(opt_ctx *ctx);
 opt_node *find_opt(opt_ctx* ctx, wchar_t opt);
-opt_ctx *parse_options(int argc, wchar_t **argv, const wchar_t *flags, int *flag_arg_count, int arg_count);
+opt_ctx *parse_options(int argc, wchar_t **argv, const wchar_t *opts, int *opt_arg_count, int arg_count);
 
 #endif
